@@ -4,6 +4,8 @@
 # The MIT License (MIT)
 #
 # Copyright (c) 2011-2014 Tom Payne
+# Copyright (c) 2022-2023 James Darbyshire (updated to Python 3)
+# Copyright (c) 2023      Webiks (Y.O.)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -23,13 +25,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
+from io import StringIO
 from fnmatch import fnmatch
 from gzip import GzipFile
-from itertools import chain, imap, islice
+from itertools import chain, islice
 import logging
 from multiprocessing import JoinableQueue, Process, current_process
 from optparse import OptionGroup, OptionParser
@@ -40,7 +39,8 @@ import sys
 import tarfile
 import time
 from datetime import datetime
-import magic #python-magic
+# TODO restore, import causes segmentation fault
+# import magic #python-magic
 import mimetypes
 import time
 import boto
@@ -108,7 +108,7 @@ class Value(object):
                     file_object.seek(self.offset)
                     self.content = file_object.read(self.size)
             elif self.path:
-                with open(self.path) as file_object:
+                with open(self.path, mode='rb') as file_object:
                     self.content = file_object.read()
             else:
                 assert False
@@ -215,7 +215,7 @@ def walk_s3(source, options):
 
 def walker(walk, put_queue, sources, options):
     logger = logging.getLogger('%s[walker-%d]' % (os.path.basename(sys.argv[0]), current_process().pid))
-    pairs = chain(*imap(lambda source: walk(source, options), sources))
+    pairs = chain(*map(lambda source: walk(source, options), sources))
     if options.resume:
         done = set()
         for filename in options.resume:
@@ -286,7 +286,8 @@ def putter(put, put_queue, stat_queue, options):
         should_gzip = False
         try:
             if connection is None:
-                connection = S3Connection(is_secure=options.secure, host=options.host)
+                # connection = S3Connection(is_secure=options.secure, host=options.host)
+                connection = boto.s3.connect_to_region(options.bucket_region,is_secure=options.secure)
             if bucket is None:
                 bucket = connection.get_bucket(options.bucket)
             key = put(bucket, key_name, value)
@@ -301,10 +302,11 @@ def putter(put, put_queue, stat_queue, options):
                     if options.content_type:
                         if options.content_type == 'guess':
                             content_type = mimetypes.guess_type(value.path)[0]
-                        elif options.content_type == 'magic':
-                            content_type = mimetypes.guess_type(value.path)[0]
-                            if content_type is None:
-                                content_type = magic.from_file(value.path, mime=True)
+                        # TODO restore, magic import cause segmentation fault
+                        # elif options.content_type == 'magic':
+                        #     content_type = mimetypes.guess_type(value.path)[0]
+                        #     if content_type is None:
+                        #         content_type = magic.from_file(value.path, mime=True)
                         else:
                             content_type = options.content_type
                         headers['Content-Type'] = content_type
@@ -445,7 +447,7 @@ def main(argv):
           aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
           is_secure=True,
           host=options.host,
-          calling_format = boto.s3.connection.OrdinaryCallingFormat(),
+        #   calling_format = boto.s3.connection.OrdinaryCallingFormat(),
         )
     
     import ssl
